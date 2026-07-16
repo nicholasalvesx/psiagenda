@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: psiagenda-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: psiagenda
+      POSTGRES_USER: psiagenda
+      POSTGRES_PASSWORD: psiagenda_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - psiagenda-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U psiagenda -d psiagenda"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Captura os e-mails do dev em vez de entregar de verdade. UI em http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: psiagenda-mail
+    restart: unless-stopped
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # interface web
+
+  # TURN/STUN: sem isso, ~15-20% das sessoes de video nao conectam (NAT/CGNAT).
+  coturn:
+    image: coturn/coturn:4.6-alpine
+    container_name: psiagenda-turn
+    restart: unless-stopped
+    network_mode: host
+    command: >
+      -n
+      --realm=psiagenda.local
+      --listening-port=3478
+      --fingerprint
+      --lt-cred-mech
+      --user=psiagenda:turn_dev
+      --min-port=49160
+      --max-port=49200
+      --log-file=stdout
+
+volumes:
+  psiagenda-pgdata:

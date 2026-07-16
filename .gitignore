@@ -1,0 +1,43 @@
+# .NET
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+artifacts/
+
+# Node / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# IDE
+.vs/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# SO
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Segredos: nunca versionar configuracao de ambiente real.
+# O appsettings.Development.json do repo tem apenas placeholders de dev.
+appsettings.Production.json
+appsettings.Local.json
+.env
+.env.*
+!.env.example
+*.pfx
+*.key
+*.pem
