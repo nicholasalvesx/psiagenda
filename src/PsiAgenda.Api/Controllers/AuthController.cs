@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using PsiAgenda.Api.RateLimit;
 using PsiAgenda.Application.Auth;
 using PsiAgenda.Application.Pacientes;
 using PsiAgenda.Domain.Common;
@@ -19,11 +21,13 @@ public class AuthController(
     private const string CookieRefresh = "psiagenda_refresh";
 
     [HttpPost("registrar/psicologo")]
+    [EnableRateLimiting(PoliticasDeRateLimit.Registro)]
     public async Task<ActionResult<TokenResponse>> RegistrarPsicologo(RegistrarPsicologoRequest req, CancellationToken ct)
         => Responder(await auth.RegistrarPsicologoAsync(req, ct));
 
     /// <summary>Cria o acesso do paciente a partir do token do convite recebido por e-mail.</summary>
     [HttpPost("registrar/paciente")]
+    [EnableRateLimiting(PoliticasDeRateLimit.Registro)]
     public async Task<ActionResult<TokenResponse>> RegistrarPaciente(RegistrarPacienteRequest req, CancellationToken ct)
         => Responder(await auth.RegistrarPacienteAsync(req, ct));
 
@@ -32,7 +36,9 @@ public class AuthController(
     public async Task<ActionResult<ConvitePreview>> ConsultarConvite(string token, CancellationToken ct)
         => Ok(await convites.ConsultarAsync(token, ct));
 
+    /// <summary>O lockout do Identity protege a conta; este limite protege contra varrer varias contas do mesmo IP.</summary>
     [HttpPost("login")]
+    [EnableRateLimiting(PoliticasDeRateLimit.Login)]
     public async Task<ActionResult<TokenResponse>> Login(LoginRequest req, CancellationToken ct)
         => Responder(await auth.LoginAsync(req, ct));
 
@@ -60,6 +66,7 @@ public class AuthController(
     /// entregaria de bandeja a lista de quem tem cadastro.
     /// </summary>
     [HttpPost("recuperar-senha")]
+    [EnableRateLimiting(PoliticasDeRateLimit.RecuperacaoDeSenha)]
     public async Task<IActionResult> PedirRecuperacao(PedirRecuperacaoRequest req, CancellationToken ct)
     {
         await recuperacao.PedirAsync(req, ct);

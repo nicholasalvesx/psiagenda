@@ -123,6 +123,39 @@ docker --context default compose up -d mailpit
 
 Caixa de entrada em http://localhost:8025.
 
+## Rate limit
+
+Tudo em `appsettings.json`, na seção `RateLimit`, sem recompilar para ajustar.
+
+O desenho **não** é um número único para a API inteira — os perfis de abuso são opostos. Um psicólogo
+navegando semanas na agenda dispara dezenas de chamadas legítimas; 8 tentativas em `/auth/login` já são
+suspeitas. Então:
+
+| Política | Padrão | Particionado por |
+|---|---|---|
+| `Global` (backstop da API) | 300/min | usuário se logado, IP se anônimo |
+| `Login` | 8/min | IP |
+| `RecuperacaoDeSenha` | 3/hora | IP |
+| `Registro` | 5/hora | IP |
+
+Pontos que valem explicação:
+
+- **O global parte por usuário, não por IP.** Uma clínica inteira atrás de um NAT compartilha o IP —
+  limitar por IP faria um profissional derrubar os colegas.
+- **`/hubs` fica fora do limite.** O signaling do WebRTC é conexão longa e com rajadas; contar como
+  requisição derrubaria a consulta no meio.
+- **`/auth/login` é por IP e complementa o lockout do Identity**, que já protege a conta individual.
+  Só lockout deixaria um atacante varrer muitas contas com poucas tentativas cada.
+- **`UseRateLimiter` vem depois de `UseAuthentication`**, senão `User` estaria vazio e todo mundo cairia
+  na partição por IP.
+- **`ForwardedHeaders` está ligado**: atrás de proxy, `RemoteIpAddress` seria o IP do proxy e um abusador
+  levaria todos junto. Em produção, preencha `KnownProxies`/`KnownNetworks` — sem isso o header
+  `X-Forwarded-For` é confiável demais e dá para forjar o IP.
+- O `appsettings.Development.json` afrouxa os números: os valores de produção travariam os testes e2e,
+  que saem todos do mesmo IP.
+
+Resposta ao estourar: **429** com `Retry-After` e o mesmo corpo (`ProblemDetails`) do resto da API.
+
 ## Pendências conhecidas
 
 - **Segredos**: `Jwt:ChaveSecreta` está no `appsettings.Development.json` só para dev. Em produção
@@ -139,5 +172,5 @@ Caixa de entrada em http://localhost:8025.
   Se aparecer na prática, a saída é um lock via BroadcastChannel ou uma janela de tolerância no backend.
 - **Limpeza de tokens**: `refresh_tokens`, `convites_de_acesso` e `tokens_de_recuperacao` só crescem.
   Falta um job apagando registros expirados/revogados.
-- **Sem rate limit** em `/auth/login` e `/auth/recuperar-senha`. O lockout do Identity segura força
-  bruta por conta, mas nada impede varrer e-mails ou inundar alguém de e-mails de recuperação.
+- **Rate limit é em memória, por instância.** Com duas réplicas atrás de um load balancer, o limite
+  efetivo dobra. Para valer de verdade em escala, precisa de contador compartilhado (Redis).

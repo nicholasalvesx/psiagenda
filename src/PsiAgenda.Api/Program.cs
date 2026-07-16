@@ -1,9 +1,11 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using PsiAgenda.Api.Autenticacao;
 using PsiAgenda.Api.Middlewares;
+using PsiAgenda.Api.RateLimit;
 using PsiAgenda.Api.Video;
 using PsiAgenda.Application.Common;
 using PsiAgenda.Infrastructure;
@@ -17,8 +19,18 @@ builder.Services.AddSignalR();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IUsuarioAtual, UsuarioAtual>();
 builder.Services.Configure<TurnOptions>(builder.Configuration.GetSection(TurnOptions.SecaoConfig));
+builder.Services.AddRateLimitDoPsiAgenda(builder.Configuration);
 builder.Services.AddExceptionHandler<TratamentoDeErros>();
 builder.Services.AddProblemDetails();
+
+// Atras de proxy/load balancer, RemoteIpAddress seria o IP do proxy: todo mundo cairia na mesma
+// particao e um abusador levaria os outros junto. KnownProxies deve ser preenchido em producao.
+builder.Services.Configure<ForwardedHeadersOptions>(opt =>
+{
+    opt.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    opt.KnownNetworks.Clear();
+    opt.KnownProxies.Clear();
+});
 
 var jwt = builder.Configuration.GetSection(JwtOptions.SecaoConfig).Get<JwtOptions>()
           ?? throw new InvalidOperationException("Secao 'Jwt' nao configurada.");
@@ -93,6 +105,7 @@ builder.Services.AddSwaggerGen(opt =>
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
@@ -107,6 +120,11 @@ else
 
 app.UseCors(PoliticaCors);
 app.UseAuthentication();
+
+// Depois do UseAuthentication de proposito: e o que permite particionar o limite global
+// por usuario em vez de por IP. Antes daqui, User ainda estaria vazio.
+app.UseRateLimiter();
+
 app.UseAuthorization();
 
 app.MapControllers();
